@@ -14,7 +14,7 @@
 // Helper function for error handling
 static int check(enum sp_return result);
 
-static int detect_m8_serial_device(struct sp_port *port) {
+int detect_m8_serial_device(struct sp_port *port) {
   // Check the connection method - we want USB serial devices
   enum sp_transport transport = sp_get_port_transport(port);
 
@@ -28,6 +28,32 @@ static int detect_m8_serial_device(struct sp_port *port) {
   }
 
   return 0;
+}
+
+int check_serial_connection() {
+  struct sp_port *m8_port = NULL;
+  struct sp_port **port_list;
+  int device_found = 0;
+  /* Call sp_list_ports() to get the ports. The port_list
+   * pointer will be updated to refer to the array created. */
+  enum sp_return result = sp_list_ports(&port_list);
+
+  if (result != SP_OK) {
+    SDL_LogError(SDL_LOG_CATEGORY_SYSTEM, "sp_list_ports() failed!\n");
+    abort();
+  }
+
+  /* Iterate through the ports. When port_list[i] is NULL
+   * this indicates the end of the list. */
+  for (int i = 0; port_list[i] != NULL; i++) {
+    struct sp_port *port = port_list[i];
+
+    if (detect_m8_serial_device(port)) {
+      device_found = 1;
+    }
+  }
+  sp_free_port_list(port_list);
+  return device_found;
 }
 
 struct sp_port *init_serial() {

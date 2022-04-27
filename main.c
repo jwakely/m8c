@@ -2,13 +2,16 @@
 // Released under the MIT licence, https://opensource.org/licenses/MIT
 
 #include <SDL.h>
+#include <SDL2/SDL_timer.h>
 #include <libserialport.h>
 #include <signal.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "command.h"
 #include "config.h"
+#include "fx_cube.h"
 #include "input.h"
 #include "render.h"
 #include "serial.h"
@@ -18,13 +21,14 @@
 // maximum amount of bytes to read from the serial in one read()
 #define serial_read_size 324
 
-uint8_t run = 1;
+int8_t run = 2;
 uint8_t need_display_reset = 0;
 
 // Handles CTRL+C / SIGINT
-void intHandler(int dummy) { run = 0; }
+void intHandler(int dummy) { run = -1; }
 
 int main(int argc, char *argv[]) {
+
   // Initialize the config to defaults read in the params from the
   // configfile if present
   config_params_s conf = init_config();
@@ -52,23 +56,56 @@ int main(int argc, char *argv[]) {
 
   slip_init(&slip, &slip_descriptor);
 
+  if (initialize_sdl(conf.init_fullscreen, conf.init_use_gpu) == -1)
+    run = -1;
+
+kiosk:
+
+  screensaver_init();
+
   struct sp_port *port;
+
+  while (run == 2) {
+    static uint32_t ticks = 0;
+    static uint32_t ticks2 = 0;
+    if (SDL_GetTicks() - ticks > 500) {
+      ticks = SDL_GetTicks();
+      if (check_serial_connection())
+        run = 1;
+    }
+    if (SDL_GetTicks() - ticks2 > 16) {
+      ticks2 = SDL_GetTicks();
+      screensaver_draw();
+      render_screen();
+    }
+    input_msg_s input = get_input_msg(&conf);
+    if (input.value == msg_quit) {
+      run = -1;
+    }
+    SDL_Delay(1);
+  }
+
+  screensaver_destroy();
 
   port = init_serial();
   if (port == NULL)
-    return -1;
+    run = -1;
 
   if (enable_and_reset_display(port) == -1)
-    run = 0;
-
-  if (initialize_sdl(conf.init_fullscreen, conf.init_use_gpu) == -1)
-    run = 0;
+    run = -1;
 
   uint8_t prev_input = 0;
 
   // main loop
-  while (run) {
-
+  while (run == 1) {
+    static int ticks = 0;
+    if (SDL_GetTicks() - ticks > 500) {
+      ticks = SDL_GetTicks();
+      if (!check_serial_connection()) {
+        run = 0;
+        SDL_Log("Device disconnected");
+      }
+    }
     // get current inputs
     input_msg_s input = get_input_msg(&conf);
 
@@ -94,7 +131,7 @@ int main(int argc, char *argv[]) {
         prev_input = input.value;
         switch (input.value) {
         case msg_quit:
-          run = 0;
+          run = -1;
           break;
         case msg_reset_display:
           reset_display(port);
@@ -111,7 +148,7 @@ int main(int argc, char *argv[]) {
     if (bytes_read < 0) {
       SDL_LogCritical(SDL_LOG_CATEGORY_ERROR, "Error %d reading serial. \n",
                       (int)bytes_read);
-      run = 0;
+      run = -1;
     }
     if (bytes_read > 0) {
       for (int i = 0; i < bytes_read; i++) {
@@ -131,13 +168,18 @@ int main(int argc, char *argv[]) {
   }
 
   // exit, clean up
-  SDL_Log("Shutting down\n");
-  close_game_controllers();
-  close_renderer();
+
   disconnect(port);
   sp_close(port);
   sp_free_port(port);
-  free(serial_buf);
-
-  return 0;
+  if (run == -1) {
+    SDL_Log("Shutting down\n");
+    close_game_controllers();
+    close_renderer();    
+    free(serial_buf);
+    return 0;
+  } else {
+    run = 2;
+    goto kiosk;
+  }
 }

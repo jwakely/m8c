@@ -4,10 +4,13 @@
 #include "render.h"
 
 #include <SDL.h>
+#include <SDL2/SDL_pixels.h>
 #include <stdio.h>
 
 #include "SDL2_inprint.h"
 #include "command.h"
+
+#include "fx_cube.h"
 
 SDL_Window *win;
 SDL_Renderer *rend;
@@ -34,7 +37,8 @@ int initialize_sdl(int init_fullscreen, int init_use_gpu) {
                          SDL_WINDOW_SHOWN | SDL_WINDOW_OPENGL |
                              SDL_WINDOW_RESIZABLE | init_fullscreen);
 
-  rend = SDL_CreateRenderer(win, -1, init_use_gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE);
+  rend = SDL_CreateRenderer(
+      win, -1, init_use_gpu ? SDL_RENDERER_ACCELERATED : SDL_RENDERER_SOFTWARE);
 
   SDL_RenderSetLogicalSize(rend, 320, 240);
 
@@ -176,18 +180,24 @@ void display_keyjazz_overlay(uint8_t show, uint8_t base_octave) {
 
 void render_screen() {
 
-    SDL_SetRenderTarget(rend, NULL);
-    SDL_SetRenderDrawColor(rend, 0, 0, 0, 0);
-    SDL_RenderClear(rend);
-    SDL_RenderCopy(rend, maintexture, NULL, NULL);
-    SDL_RenderPresent(rend);
-    SDL_SetRenderTarget(rend, maintexture);
+  SDL_SetRenderTarget(rend, NULL);
+  SDL_SetRenderDrawColor(rend, 0, 0, 0, 0);
+  SDL_RenderClear(rend);
+  SDL_RenderCopy(rend, maintexture, NULL, NULL);
+  SDL_RenderPresent(rend);
+  SDL_SetRenderTarget(rend, maintexture);
 
-    fps++;
+  fps++;
 
-    if (SDL_GetTicks() - ticks_fps > 5000) {
-      ticks_fps = SDL_GetTicks();
-      SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "%.1f fps\n", (float)fps / 5);
-      fps = 0;
-    }
+  if (SDL_GetTicks() - ticks_fps > 5000) {
+    ticks_fps = SDL_GetTicks();
+    SDL_LogDebug(SDL_LOG_CATEGORY_VIDEO, "%.1f fps\n", (float)fps / 5);
+    fps = 0;
+  }
 }
+
+void screensaver_init() { fx_cube_init(rend, (SDL_Color){255,255,255,255}); }
+
+void screensaver_draw() { fx_cube_update(); }
+
+void screensaver_destroy() { fx_cube_destroy(); }

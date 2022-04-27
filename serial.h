@@ -7,5 +7,6 @@
 #include <libserialport.h>
 
 struct sp_port *init_serial();
+int check_serial_connection();
 
 #endif
